@@ -32,6 +32,7 @@ class MainApp(tk.Tk):
         ttk.Button(nav_bar, text="Play", style='Nav.TButton', command=lambda: self.show_frame(PlayPage)).grid(row=2, column=0, sticky="ew", pady=10, padx=100)
         ttk.Button(nav_bar, text="Explore", style='Nav.TButton', command=lambda: self.show_frame(ExplorePage)).grid(row=3, column=0, sticky="ew", pady=10, padx=100)
         ttk.Button(nav_bar, text="Get Started", style='Nav.TButton', command=lambda: self.show_frame(GetStartedPage)).grid(row=4, column=0, sticky="ew", pady=10, padx=100)
+        ttk.Button(nav_bar, text="Settings", style='Nav.TButton', command=lambda: self.show_frame(GetStartedPage)).grid(row=5, column=0, sticky="ew", pady=10, padx=100)
         # Make the nav_bar expandable
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=0)
