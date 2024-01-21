@@ -4,11 +4,10 @@ from tqdm import tqdm
 from torchvision.transforms import transforms
 from torch.utils.data import DataLoader
 
-from configs import paths_config, hyperparameters, global_config
-from training.projectors import w_projector
-from utils.ImagesDataset import ImagesDataset
-from utils.align_data import pre_process_images
-
+from api.configs import paths_config, hyperparameters, global_config
+from api.inversion_training.projectors import w_projector
+from api.image_processing.ImagesDataset import ImagesDataset
+from api.image_processing.align_data import pre_process_images
 
 def create_dataloader(images_dir):
     dataset = ImagesDataset(images_dir, transforms.Compose([
@@ -34,24 +33,33 @@ def get_embbeded_image(image, image_name, old_G, use_wandb=False):
     return w
 
 
-old_G = load_G()
+def calc_inversiones(input_images_dir=None, processed_images_dir=None, embbeding_images_dir = None):
 
-# images_dir = '/home/yoavaviv/GAN-pain/shoulder_pain_dataset/test_images'
-# embedding_dir = '/home/yoavaviv/GAN-pain/shoulder_pain_dataset/emmbbeded_images'
+    input_images_dir = paths_config.input_images_dir if input_images_dir is None else input_images_dir
+    processed_images_dir = paths_config.processed_images_dir if processed_images_dir is None else processed_images_dir
+    embbeding_images_dir = paths_config.embedding_base_dir if embbeding_images_dir is None else embbeding_images_dir
 
-# Align and crop raw images and save them inside '/home/yoavaviv/GAN-pain/processed_images'
-pre_process_images(paths_config.input_images_dir)
-print(f"Images aligned and saved in GAN-pain/processed_images dir")
+    # Align and crop raw images and save them inside '/home/yoavaviv/GAN-pain/processed_images'
+    pre_process_images(input_images_dir, processed_images_dir=processed_images_dir)
 
-dataloader = create_dataloader(images_dir=paths_config.processed_images_dir)
+    dataloader = create_dataloader(images_dir=processed_images_dir)
 
-for fname, image in tqdm(dataloader):
-    image_name = fname[0]
+    old_G = load_G()
 
-    # w_pivot = base.calc_inversions(image, image_name)
-    # torch.save(w_pivot, f'{embedding_dir}/{image_name}.pt')
-    embbeded_image = get_embbeded_image(image, image_name, old_G)
-    
-    embbeded_image = embbeded_image.to(global_config.device)
+    for fname, image in tqdm(dataloader):
+        image_name = fname[0]
 
-    torch.save(embbeded_image, f'{paths_config.embedding_base_dir}/{image_name}.pt')
+        # w_pivot = base.calc_inversions(image, image_name)
+        # torch.save(w_pivot, f'{embedding_dir}/{image_name}.pt')
+        embbeded_image = get_embbeded_image(image, image_name, old_G)
+        
+        embbeded_image = embbeded_image.to(global_config.device)
+
+        torch.save(embbeded_image, f'{embbeding_images_dir}/{image_name}.pt')
+
+if __name__ == "__main__":
+    calc_inversiones()
+
+    # input_images_dir='/home/yoavaviv/test GUI/input_images',
+    # processed_images_dir='/home/yoavaviv/test GUI/processed_images',
+    # embbeding_images_dir = '/home/yoavaviv/test GUI/embeddings'
