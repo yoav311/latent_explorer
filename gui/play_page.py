@@ -1,12 +1,14 @@
+# Python packages imports
 import tkinter as tk
 import os
 import shutil
 import dlib
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, simpledialog
 from PIL import Image, ImageTk
 import torch
 import threading
 
+# API imports
 from api.image_processing.face_alignment import align_face
 from api.configs import paths_config
 from api.play import run_pti as pti_inversion
@@ -36,9 +38,14 @@ class PlayPage(ttk.Frame):
         self.smile_label = ttk.Label(self, text="Smile: 0")
         self.age_label = ttk.Label(self, text="Age: 0")
         self.pose_label = ttk.Label(self, text="Pose: 0")
+
+        self.save_button = ttk.Button(self, text="Save image", command=self.save_image)
         
 
     def upload_image(self):
+
+        # Reset the edited image if exists
+        self.edited_new_image = None
 
         self.create_gan_inversion_button.grid_remove()
         self.edited_image_label.grid_remove()
@@ -80,6 +87,12 @@ class PlayPage(ttk.Frame):
             self.image_on_window = True
 
             self.create_gan_inversion_button.grid(row=4, column=4, padx=30, pady=10, sticky="ew")
+    
+    def save_image(self):
+        if self.edited_new_image is not None:
+            image_name = simpledialog.askstring("Input", "Enter the image name:", parent=self)
+            image_saving_path = os.path.join(self.user_root_folder, "output_images", f"{image_name}.jpeg")
+            self.edited_new_image.save(image_saving_path)
         
     def get_file_path(self, folder_path, file_extention):
         # List all files in the directory
@@ -95,6 +108,9 @@ class PlayPage(ttk.Frame):
             return None
 
     def upload_inverted_image(self):
+
+        # Reset the edited image if exists
+        self.edited_new_image = None
 
         self.create_gan_inversion_button.grid_remove()
         self.edited_image_label.grid_remove()
@@ -112,19 +128,19 @@ class PlayPage(ttk.Frame):
 
         if self.inverted_image_path:
 
-            self.chosen_image_dir = os.path.dirname(os.path.dirname(self.inverted_image_path))
+            self.user_root_folder = os.path.dirname(os.path.dirname(self.inverted_image_path))
             
-            self.original_image_path = self.get_file_path(folder_path=os.path.join(self.chosen_image_dir, "input_image"), file_extention=".png")
+            self.original_image_path = self.get_file_path(folder_path=os.path.join(self.user_root_folder, "input_image"), file_extention=".jpeg")
             if self.original_image_path is None:
                 print(f"No Input Image in the chosen dir with the extention .jpeg")
                 return
             
-            self.w_path = self.get_file_path(folder_path=os.path.join(self.chosen_image_dir, "embeddings"), file_extention=".pt")
+            self.w_path = self.get_file_path(folder_path=os.path.join(self.user_root_folder, "embeddings"), file_extention=".pt")
             if self.original_image_path is None:
                 print(f"No Input Vector in the embeddings dir with the extention .pt")
                 return
             
-            self.new_generator_path = self.get_file_path(folder_path=os.path.join(self.chosen_image_dir, "generator"), file_extention=".pt")
+            self.new_generator_path = self.get_file_path(folder_path=os.path.join(self.user_root_folder, "generator"), file_extention=".pt")
             if self.original_image_path is None:
                 print(f"No Input Vector in the generator dir with the extention .pt")
                 return
@@ -157,30 +173,30 @@ class PlayPage(ttk.Frame):
         image_name, _ = os.path.splitext(image_file)
 
         # Step 2: Create a new folder named after the image name
-        new_folder_path = os.path.join(folder_path, f"play_with_{image_name}")
-        if not os.path.exists(new_folder_path):
-            os.mkdir(new_folder_path)
+        self.user_root_folder = os.path.join(folder_path, f"play_with_{image_name}")
+        if not os.path.exists(self.user_root_folder):
+            os.mkdir(self.user_root_folder)
 
         # Step 3: Create the four specified subfolders
         subfolders = ["input_image", "inversion_image", "output_images", "embeddings", "generator"]
         for subfolder in subfolders:
-            subfolder_path = os.path.join(new_folder_path, subfolder)
+            subfolder_path = os.path.join(self.user_root_folder, subfolder)
             if not os.path.exists(subfolder_path):
                 os.mkdir(subfolder_path)
 
         # Step 4: Copy the image to the "input_image" folder
-        destination_path = os.path.join(new_folder_path, "input_image", image_file)
+        destination_path = os.path.join(self.user_root_folder, "input_image", f"{image_name}.jpeg")
         shutil.move(self.processed_image_path, destination_path)
 
-        paths_config.processed_images_dir = os.path.join(new_folder_path, "input_image")
+        paths_config.processed_images_dir = os.path.join(self.user_root_folder, "input_image")
 
         # paths to the embeding vector folder and file
-        paths_config.embedding_base_dir = os.path.join(new_folder_path, "embeddings")
+        paths_config.embedding_base_dir = os.path.join(self.user_root_folder, "embeddings")
         self.w_path = os.path.join(paths_config.embedding_base_dir, f"{image_name}.pt")
         print(f"_____ W path saved by test_GUI: {self.w_path} _____")
 
         # path to the generator model folder and file
-        paths_config.generaator_dir = os.path.join(new_folder_path, "generator")
+        paths_config.generaator_dir = os.path.join(self.user_root_folder, "generator")
         self.new_generator_path = os.path.join(paths_config.generaator_dir, f"{image_name}_model.pt")
         print(f"_____ Generator path saved by test_GUI: {self.new_generator_path} _____")
 
@@ -194,7 +210,7 @@ class PlayPage(ttk.Frame):
 
         new_image = (new_image.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8).detach().cpu().numpy()[0] 
         new_image = Image.fromarray(new_image,mode='RGB')
-        new_image.save(os.path.join(new_folder_path, "inversion_image", f"{image_name}.jpeg"))
+        new_image.save(os.path.join(self.user_root_folder, "inversion_image", f"{image_name}.jpeg"))
         self.progress.stop()
         self.progress.grid_remove()
         self.waiting_massage.grid_remove()
@@ -292,13 +308,16 @@ class PlayPage(ttk.Frame):
         
         new_latent = self.get_edited_w(w_pivot, factors)
 
-        edited_new_image = new_G.synthesis(new_latent, noise_mode='const', force_fp32 = True)
+        self.edited_new_image = new_G.synthesis(new_latent, noise_mode='const', force_fp32 = True)
         
         # Display the new image
-        edited_new_image = (edited_new_image.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8).detach().cpu().numpy()[0] 
-        edited_new_image = Image.fromarray(edited_new_image, mode='RGB')
-        edited_new_image.thumbnail((250, 250))
-        edited_new_image = ImageTk.PhotoImage(edited_new_image)
-        self.new_img_label = ttk.Label(self, image=edited_new_image)
-        self.new_img_label.image = edited_new_image
+        self.edited_new_image = (self.edited_new_image.permute(0, 2, 3, 1) * 127.5 + 128).clamp(0, 255).to(torch.uint8).detach().cpu().numpy()[0] 
+        self.edited_new_image = Image.fromarray(self.edited_new_image, mode='RGB')
+        displayed_new_image = self.edited_new_image
+        displayed_new_image.thumbnail((250, 250))
+        displayed_new_image = ImageTk.PhotoImage(displayed_new_image)
+        self.new_img_label = ttk.Label(self, image=displayed_new_image)
+        self.new_img_label.image = displayed_new_image
         self.new_img_label.grid(row=4, column=5, columnspan=2, padx=30, pady=10)
+
+        self.save_button.grid(row=5, column=5, columnspan=2, padx=30, pady=10)
