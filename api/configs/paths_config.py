@@ -1,9 +1,4 @@
 ## Pretrained models paths
-# e4e = '/home/yoavaviv/GAN-pain/pretrained_models/e4e_ffhq_encode.pt'
-# stylegan2_ada_ffhq = '/home/yoavaviv/GAN-pain/pretrained_models/ffhq.pkl'
-# style_clip_pretrained_mappers = ''
-# ir_se50 = './pretrained_models/model_ir_se50.pth'
-# dlib = '/home/yoavaviv/GAN-pain/pretrained_models/align.dat'
 
 e4e = './database/pretrained_models/e4e_ffhq_encode.pt'
 stylegan2_ada_ffhq = './database/pretrained_models/ffhq.pkl'
