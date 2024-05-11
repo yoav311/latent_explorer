@@ -2,8 +2,10 @@
 
 import numpy as np
 from sklearn import svm
+import torch
 
 from api.explore.logger import setup_logger
+
 
 __all__ = ['train_boundary', 'project_boundary', 'linear_interpolate']
 
@@ -149,3 +151,20 @@ def train_boundary(latent_codes,
 
   a = classifier.coef_.reshape(1, latent_space_dim).astype(np.float32)
   return a / np.linalg.norm(a)
+
+
+def train_and_save_boundaries(latent_code_path,
+                              atent_scores_path,
+                              boundary_tensor_path):
+  
+
+  latent_codes = np.load(latent_code_path)
+
+  pain_scores = np.load(atent_scores_path)
+
+  boundary = train_boundary(latent_codes=latent_codes, scores=pain_scores,split_ratio=0.95)
+
+  boundary_tensor = torch.from_numpy(boundary)
+
+  torch.save(boundary_tensor, boundary_tensor_path)
+
