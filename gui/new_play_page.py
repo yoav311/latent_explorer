@@ -1,5 +1,8 @@
-# Python packages imports
 import tkinter as tk
+from tkinter import ttk, filedialog, simpledialog
+import os
+import torch
+from PIL import Image, ImageTk
 import os
 import shutil
 import dlib
@@ -13,10 +16,51 @@ from api.image_processing.face_alignment import align_face
 from api.configs import paths_config
 from api.play import run_pti as pti_inversion
 
+class DirectionWidget(ttk.Frame):
+    def __init__(self, parent, directions, update_callback):
+        super().__init__(parent)
+        
+        self.directions = directions
+        self.update_callback = update_callback
+        self.variable = tk.StringVar(self)
+        self.variable.set("Select Direction")
+        
+        self.dropdown = ttk.Combobox(self, textvariable=self.variable, values=list(self.directions.keys()))
+        self.dropdown.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5, pady=5)
+        self.dropdown.bind('<<ComboboxSelected>>', self.on_direction_selected)
+        
+        self.scale_value_label = ttk.Label(self, text="Value: 0.0")  # Initial label text
+        self.scale_value_label.pack(side=tk.RIGHT, padx=5, pady=5)
+        
+        self.scale = None
+
+    def on_direction_selected(self, event):
+        direction = self.variable.get()
+        if self.scale:
+            self.scale.destroy()
+        self.scale = ttk.Scale(self, from_=-5, to=5, orient='horizontal', command=self.on_scale_change)
+        self.scale.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=5, pady=5)
+        
+    def on_scale_change(self, value):
+        self.update_callback(self.variable.get(), float(value))
+        self.scale_value_label.config(text=f"Value: {float(value):.1f}")  # Update label text
+
 
 class PlayPage(ttk.Frame):
     def __init__(self, parent, controller):
         ttk.Frame.__init__(self, parent)
+        self.controller = controller
+        self.direction_widgets = []
+
+        # Initialize a counter for tracking the grid row for new widgets
+        self.next_grid_row = 6  # Adjust the starting row as needed based on your layout
+        self.add_direction_button = ttk.Button(self, text="Add Another Direction", command=self.add_direction_widget)
+        # Place the button at a specific row, and update self.next_grid_row accordingly
+        self.add_direction_button.grid(row=self.next_grid_row, column=4, sticky="nsew", padx=5, pady=5)
+        self.next_grid_row += 1  # Increment for the next widget
+
+        self.direction_tensors = self.load_direction_tensors('./database/editing_directions/interfacegan_directions/')
+
         self.upload_new_image_button = ttk.Button(self, text="Upload New Image", command=self.upload_image)
         self.upload_new_image_button.grid(row=2, column=4, padx=30, pady=10, sticky="ew")
         self.upload_existing_image_button = ttk.Button(self, text="Upload existing Inversion", command=self.upload_inverted_image)
@@ -30,17 +74,9 @@ class PlayPage(ttk.Frame):
         self.image_on_window = False
         self.inversion_image_on_window = False
 
-        self.generate_button = ttk.Button(self, text="Generate New Image", command=self.on_generate_new_image)
-        self.smile_scale = ttk.Scale(self, from_=-3, to=3, orient='horizontal', command=self.update_smile_label)
-        self.age_scale = ttk.Scale(self, from_=-3, to=3, orient='horizontal', command=self.update_age_label)
-        self.pose_scale = ttk.Scale(self, from_=-3, to=3, orient='horizontal', command=self.update_pose_label)
-
-        self.smile_label = ttk.Label(self, text="Smile: 0")
-        self.age_label = ttk.Label(self, text="Age: 0")
-        self.pose_label = ttk.Label(self, text="Pose: 0")
-
+        self.generate_button = ttk.Button(self, text="Generate New Image", command=self.generate_new_image)
         self.save_button = ttk.Button(self, text="Save image", command=self.save_image)
-        
+
 
     def upload_image(self):
 
@@ -51,13 +87,6 @@ class PlayPage(ttk.Frame):
         self.edited_image_label.grid_remove()
         self.original_image_label.grid_remove()
         self.generate_button.grid_remove()
-        self.smile_scale.grid_remove()
-        self.age_scale.grid_remove()
-        self.pose_scale.grid_remove()
-        self.smile_label.grid_remove()
-        self.age_label.grid_remove()
-        self.pose_label.grid_remove()
-
 
         if self.image_on_window:
             self.original_img.grid_remove()
@@ -164,7 +193,6 @@ class PlayPage(ttk.Frame):
             self.edited_image_label.grid(row=3, column=5, columnspan=2, padx=30, pady=10)
             self.inversion_image_on_window = True
 
-            self.add_scrollbars()
             self.generate_button.grid(row=12, column=4, padx=30, pady=10, sticky="ew")
   
     def create_gan_inversion(self):
@@ -224,8 +252,6 @@ class PlayPage(ttk.Frame):
         self.edited_image_label.grid(row=3, column=5, columnspan=2, padx=30, pady=10)
         self.inversion_image_on_window = True
 
-        # Code to add scrollbars and button after GAN inversion
-        self.add_scrollbars()
         self.generate_button.grid(row=12, column=4, padx=30, pady=10, sticky="ew")
 
     def start_gan_inversion(self):
@@ -234,81 +260,46 @@ class PlayPage(ttk.Frame):
         self.progress.start(10)
         self.waiting_massage.grid(row=5, column=4, padx=10, pady=10, sticky="ew")
         threading.Thread(target=self.create_gan_inversion).start()
-    
-    def add_scale_range_labels(self, row, column):
-        label_min = ttk.Label(self, text="-3")
-        label_min.grid(row=row, column=column, padx=(0, 0), pady=(0, 5), sticky="w")
-        
-        label_max = ttk.Label(self, text="3")
-        label_max.grid(row=row, column=column, padx=(0, 0), pady=(0, 5), sticky="e")
+ 
+    def load_direction_tensors(self, directory):
+        direction_tensors = {}
+        for file in os.listdir(directory):
+            if file.endswith(".pt"):
+                name = file[:-3]  # Remove the .pt extension
+                path = os.path.join(directory, file)
+                direction_tensors[name] = path
+        return direction_tensors
 
-    def update_smile_label(self, value):
-        self.smile_label.config(text=f"Smile: {float(value):.1f}")
+    def add_direction_widget(self):
+        widget = DirectionWidget(self, self.direction_tensors, self.update_latent_direction)
+        # Use grid and place each new widget in the next available row
+        widget.grid(row=self.next_grid_row, column=4, sticky="nsew", padx=5, pady=5)
+        self.direction_widgets.append(widget)
+        # Increment the row counter so the next widget will be below
+        self.next_grid_row += 1
 
-    def update_age_label(self, value):
-        self.age_label.config(text=f"Age: {float(value):.1f}")
+    def update_latent_direction(self, direction_name, value):
+        print(f"Updating {direction_name} with value {value}")
+        # Here you would adjust the `edited_latent` variable
+        # This is just a placeholder for demonstration
 
-    def update_pose_label(self, value):
-        self.pose_label.config(text=f"Pose: {float(value):.1f}")
-    
-    def add_scrollbars(self):
-
-        # Label and Scale for Smile
-        self.smile_scale.set(0)  # Set initial value to 0
-        self.smile_scale.grid(row=7, column=4, padx=30, pady=10, sticky="ew")
-        self.smile_label.grid(row=6, column=4, padx=30, pady=(10, 0), sticky="s")
-        self.add_scale_range_labels(7, 4)
-
-        # Label and Scale for Age
-        self.age_scale.set(0)  # Set initial value to 0
-        self.age_scale.grid(row=9, column=4, padx=30, pady=10, sticky="ew")
-        self.age_label.grid(row=8, column=4, padx=30, pady=(10, 0), sticky="s")
-        self.add_scale_range_labels(9, 4)
-
-        # Label and Scale for Pose
-        self.pose_scale.set(0)  # Set initial value to 0
-        self.pose_scale.grid(row=11, column=4, padx=30, pady=10, sticky="ew")
-        self.pose_label.grid(row=10, column=4, padx=30, pady=(10, 0), sticky="s")
-        self.add_scale_range_labels(11, 4)
-
-    def on_generate_new_image(self):
-
-        self.smile = self.smile_scale.get()
-        self.age = self.age_scale.get()
-        self.pose = self.pose_scale.get()
-
-        self.factors = [self.pose, self.smile, self.age]
-
-        # Call the method to generate new image
-        self.generate_new_image(self.factors)
-
-    def get_edited_w(self, start_w, factors):
-
-        edited_latent = start_w
-
-        # self.latent_editor = LatentEditor()
-        
-        self.interfacegan_directions = {'age': f'{paths_config.interfacegan_age}',
-                                        'smile': f'{paths_config.interfacegan_smile}',
-                                        'rotation': f'{paths_config.interfacegan_rotation}'}
-        self.interfacegan_directions_tensors = {name: torch.load(path).cuda() for name, path in
-                                                self.interfacegan_directions.items()}
-        
-        for factor, direction in zip(factors, ['rotation', 'smile', 'age']):
-
-            print(f"self.interfacegan_directions_tensors[direction]: {self.interfacegan_directions_tensors[direction].size()}")
-
-            edited_latent = edited_latent + factor * self.interfacegan_directions_tensors[direction]
-
+    def get_edited_w(self, start_w):
+        edited_latent = start_w.clone()
+        for widget in self.direction_widgets:
+            direction_name = widget.variable.get()
+            if direction_name in self.direction_tensors:
+                direction_tensor = torch.load(self.direction_tensors[direction_name]).cuda()
+                factor = widget.scale.get() if widget.scale else 0
+                edited_latent += factor * direction_tensor
         return edited_latent
-    
-    def generate_new_image(self, factors):
+
+    def generate_new_image(self):
 
         w_pivot = torch.load(self.w_path)
         with open(self.new_generator_path, 'rb') as f_new: 
             new_G = torch.load(f_new).cuda()
         
-        new_latent = self.get_edited_w(w_pivot, factors)
+        new_latent = self.get_edited_w(w_pivot)
 
         self.edited_new_image = new_G.synthesis(new_latent, noise_mode='const', force_fp32 = True)
         
