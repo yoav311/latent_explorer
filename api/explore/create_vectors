@@ -1,0 +1,65 @@
+
+import os
+import json
+import torch
+import numpy as np
+
+
+def create_vectors(embeddings_folder,
+                   Frame_labels_json_file_path,
+                    output_dir):
+    
+    # Take embedding directory and using the "Frame_labels.json" file containing the scores for all images craete 2 vectors:
+    # 1 of latent codes and one of their scores.
+    
+    # Load latent codes and corresponding image names
+    latent_codes = []
+    image_names = []
+    embeddings_folder = embeddings_folder # for example: "./training/embeddings" 
+
+    for filename in os.listdir(embeddings_folder):
+        if filename.endswith(".pt"):
+            filepath = os.path.join(embeddings_folder, filename)
+            w_pivot = torch.load(filepath)
+            w_pivot = w_pivot[0,0,:]
+            #print(f"w_pivot.shape = {w_pivot.shape}")
+            latent_codes.append(w_pivot.cpu().detach().numpy())
+            #print (f"w_pivot = {w_pivot.cpu().detach().numpy()}")
+            image_names.append(filename[:-3] + "_facs")  # Add "_facs" to the image names
+
+    # Load the JSON file
+    json_file_path = Frame_labels_json_file_path # for exemple: "Frame_Labels.json" if its in the same directory
+    if os.path.exists(json_file_path):
+        with open(json_file_path, 'r') as file:
+            data = json.load(file)
+
+            # Find corresponding "pain" scores for the image names
+            pain_scores = []
+            for image_name in image_names:
+                for item in data:
+                    if item['frame'] == image_name:
+                        pain_scores.append(item['pain'])
+                        break  # Stop searching when a match is found
+
+            # Convert lists to NumPy arrays
+            latent_codes = np.array(latent_codes)
+            pain_scores = np.array(pain_scores).reshape((len(pain_scores), 1))
+            np.save(f"{output_dir}/latent_codes.npy", latent_codes)
+            np.save(f"{output_dir}/pain_scores.npy", pain_scores)
+
+            # Flatten the 4D array to 2D
+            flattened_latent_codes = latent_codes.reshape(latent_codes.shape[0], -1)
+
+            
+
+            # Save NumPy arrays as CSV (text) files
+            np.savetxt(f"{output_dir}/latent_codes.txt", flattened_latent_codes, delimiter=',', fmt='%f')
+            np.savetxt(f"{output_dir}/pain_scores.txt", pain_scores, delimiter=',', fmt='%d')
+
+            # Display the saved files
+            print(f"Saved 'latent_codes.txt' and 'pain_scores.txt'.")
+    else:
+        print(f"JSON file not found at {json_file_path}")
+
+
+
