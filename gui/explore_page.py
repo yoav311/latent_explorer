@@ -16,7 +16,7 @@ class ExplorePage(ttk.Frame):
         self.dataset_dir = None  # Variable to store the selected directory path
 
         ttk.Button(self, text="Choose Dataset Dir", command=self.choose_dataset_dir).grid(row=0, column=0, padx=10, pady=10)
-        ttk.Button(self, text="Calculate Embeddings", command=self.calc_inversions).grid(row=0, column=1, padx=10, pady=10)
+        ttk.Button(self, text="Calculate Embeddings", command=self.calc_inversions).grid(row=1, column=0, padx=10, pady=10)
         ttk.Button(self, text="Go Home", command=lambda: controller.show_frame(HomePage)).grid(row=0, column=2, padx=10, pady=10)
 
     def choose_dataset_dir(self):

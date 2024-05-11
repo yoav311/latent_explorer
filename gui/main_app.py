@@ -1,10 +1,12 @@
+# export PYTHONPATH=/home/yoavaviv/latent_explorer:$PYTHONPATH
+
 # Python packages imports
 import tkinter as tk
 from tkinter import ttk
 
 # Frontend imports
 from gui.home_page import HomePage
-from gui.play_page import PlayPage
+from gui.new_play_page import PlayPage
 from gui.explore_page import ExplorePage
 from gui.get_started_page import GetStartedPage
 
